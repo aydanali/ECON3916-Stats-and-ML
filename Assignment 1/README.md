@@ -44,3 +44,119 @@ This project constructs a **Student Price Index (SPI)** to measure inflation as 
 
 ## 🔧 Technical Requirements
 ```python
+# Required packages
+pandas
+matplotlib
+seaborn
+fredapi
+```
+
+Install dependencies:
+```bash
+pip install pandas matplotlib seaborn fredapi
+```
+
+## 🔑 Setup Instructions
+
+1. **Obtain FRED API Key**:
+   - Visit: https://fred.stlouisfed.org/docs/api/api_key.html
+   - Create free account and generate API key
+   - Replace `'API_KEY'` in code with your actual key
+
+2. **Run the analysis**:
+```python
+   from fredapi import Fred
+   fred = Fred(api_key='YOUR_API_KEY_HERE')
+```
+
+## 📈 Methodology
+
+### Index Construction
+The Student Price Index uses a **weighted average** formula:
+```
+SPI = (Rent × 0.60 + Groceries × 0.30 + Spotify × 0.02 + Sandwich × 0.08) / 4
+```
+
+### Normalization Process
+All series are normalized to a common baseline:
+```python
+normalized_value = (current_value / base_value) × 100
+```
+
+This allows direct comparison across different CPI components with different base years.
+
+### Data Crime Example
+Phase 3 includes a deliberate "data crime" visualization showing **un-normalized indices**. This demonstrates why comparing raw indices with different base years produces misleading results—like comparing apples to oranges.
+
+## 📊 Visualizations
+
+1. **Individual Component Trends** (Phase 3): Four-line plot showing divergent inflation paths for Rent, Groceries, Spotify, and Sandwiches
+2. **SPI vs. National CPI** (Phase 3): Highlights the growing gap between student and general inflation
+3. **Three-Way Regional Comparison** (Phase 4): National, Boston regional, and Student inflation trajectories
+
+## 🎓 Economic Insights
+
+### Why Student Inflation Differs
+1. **Housing weight**: Students allocate ~60% of budget to rent vs. ~30% in official CPI
+2. **Geographic concentration**: Students cluster in high-cost urban areas (e.g., Boston)
+3. **Lifecycle effects**: Students consume more services experiencing above-average inflation
+
+### Policy Implications
+- **Financial aid calculations** using national CPI may underestimate true student cost burdens
+- **Student loan policy** should account for differential inflation in education-related costs
+- **University budgeting** for student services requires region-specific inflation adjustments
+
+## 🐛 Known Issues & Solutions
+
+### SettingWithCopyWarning
+The code generates pandas warnings when modifying `df_norm`. This is cosmetic and doesn't affect results. To suppress:
+```python
+df_norm = df_norm.copy()  # Create explicit copy before modifications
+```
+
+### Missing Boston CPI Data
+Boston metro CPI is published **bimonthly**, creating gaps in monthly data. Solution implemented:
+```python
+df_merged['Boston_CPI'] = df_merged['Boston_CPI'].ffill()  # Forward-fill
+```
+
+## 📚 Data Sources
+
+- **FRED (Federal Reserve Economic Data)**: All CPI series
+- **Bureau of Labor Statistics**: Original data provider for CPI
+- **Time period**: January 1992 - December 2025 (407 observations)
+
+## 🔄 Replication
+
+To replicate this analysis:
+1. Ensure FRED API key is configured
+2. Run all code blocks sequentially (Phases 1-4)
+3. Final DataFrame `df_merged` contains all three comparable indices
+4. Analysis summary prints automatically after Phase 4
+
+## 📝 Citation
+
+If using this methodology in research:
+```
+Student Price Index Analysis (2025)
+Data: Federal Reserve Economic Data (FRED)
+Methodology: Weighted composite index construction with regional comparison
+```
+
+## 🤝 Contributing
+
+This project is designed for educational purposes in macroeconomics and econometrics courses. Suggested extensions:
+- Add more student-relevant categories (textbooks, technology, transportation)
+- Incorporate additional metro areas for broader regional analysis
+- Calculate real wage adjustments for student employment
+- Extend historical analysis back to 1980s
+
+## 📧 Contact
+
+For questions about methodology or implementation, consult macroeconomic price index literature or FRED documentation.
+
+---
+
+**Last Updated**: December 2025  
+**Python Version**: 3.12+  
+**Pandas Version**: 2.2.2+
