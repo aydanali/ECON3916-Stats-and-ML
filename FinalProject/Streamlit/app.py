@@ -142,17 +142,121 @@ def load_data():
 
 @st.cache_resource
 def load_models():
-    """
-    Load pre-trained models and scaler from disk.
-    @st.cache_resource keeps them in memory — avoids ~200 MB reload on every
-    widget interaction and keeps RAM well below the 1 GB limit.
-    """
-    model_ols   = joblib.load("model_ols.pkl")
-    model_ridge = joblib.load("model_ridge.pkl")
-    model_rf    = joblib.load("model_rf.pkl")
-    scaler      = joblib.load("scaler.pkl")
-    feat_stats  = joblib.load("feature_stats.pkl")
-    return model_ols, model_ridge, model_rf, scaler, feat_stats
+    import warnings
+    warnings.filterwarnings("ignore")
+
+    RANDOM_STATE = 42
+    np.random.seed(RANDOM_STATE)
+
+    # ── Load raw data ────────────────────────────────────────────
+    df_raw = pd.read_csv('https://raw.githubusercontent.com/owid/co2-data/refs/heads/master/owid-co2-data.csv')
+
+    # ── Clean ────────────────────────────────────────────────────
+    START_YEAR            = 1990
+    END_YEAR              = 2024
+    COLUMN_NAN_THRESHOLD  = 0.50
+    COUNTRY_NAN_THRESHOLD = 0.50
+    FOCUS_COLS = [
+        "co2", "co2_per_capita", "primary_energy_consumption",
+        "energy_per_capita", "energy_per_gdp", "gdp",
+        "methane", "nitrous_oxide", "total_ghg",
+        "coal_co2", "gas_co2", "oil_co2",
+    ]
+
+    df = df_raw[df_raw["iso_code"].notna()].copy()
+    df = df[(df["year"] >= START_YEAR) & (df["year"] <= END_YEAR)].copy()
+
+    miss_share = df.isna().mean()
+    drop_cols  = [c for c in miss_share[miss_share > COLUMN_NAN_THRESHOLD].index
+                  if c not in ["country", "year", "iso_code"]]
+    df = df.drop(columns=drop_cols)
+
+    focus_present = [c for c in FOCUS_COLS if c in df.columns]
+    country_miss  = (df.groupby("country")[focus_present]
+                       .apply(lambda g: g.isna().to_numpy().mean()))
+    keep          = country_miss[country_miss <= COUNTRY_NAN_THRESHOLD].index
+    df            = df[df["country"].isin(keep)].copy()
+
+    df = df.sort_values(["country", "year"]).reset_index(drop=True)
+    id_cols      = ["country", "year", "iso_code"]
+    numeric_cols = [c for c in df.columns
+                    if c not in id_cols and pd.api.types.is_numeric_dtype(df[c])]
+    for _, idx in df.groupby("country").groups.items():
+        df.loc[idx, numeric_cols] = (
+            df.loc[idx, numeric_cols]
+              .interpolate(method="linear", limit_direction="both", limit_area="inside")
+              .values
+        )
+
+    df = df.sort_values(["country", "year"]).reset_index(drop=True)
+    df = df[[
+        "country", "year", "iso_code", "population", "gdp", "co2",
+        "co2_per_unit_energy", "energy_per_capita", "ghg_per_capita",
+        "methane", "nitrous_oxide", "oil_co2",
+        "primary_energy_consumption", "total_ghg",
+    ]]
+
+    interp_cols = [c for c in df.columns if c not in ["country", "year", "iso_code"]]
+    for col in interp_cols:
+        df[col] = (df.groupby("country")[col]
+                     .transform(lambda x: x.interpolate())
+                     .ffill().bfill())
+
+    # ── Feature engineering ──────────────────────────────────────
+    df["gdp_log"]                        = np.log1p(df["gdp"])
+    df["co2_log"]                        = np.log1p(df["co2"])
+    df["methane_log"]                    = np.log1p(df["methane"])
+    df["nitrous_oxide_log"]              = np.log1p(df["nitrous_oxide"])
+    df["oil_co2_log"]                    = np.log1p(df["oil_co2"])
+    df["primary_energy_consumption_log"] = np.log1p(df["primary_energy_consumption"])
+    df["total_ghg_log"]                  = np.log1p(df["total_ghg"])
+
+    MODEL_FEATURES = [
+        "co2_log", "co2_per_unit_energy", "energy_per_capita",
+        "ghg_per_capita", "methane_log", "nitrous_oxide_log",
+        "oil_co2_log", "primary_energy_consumption_log", "total_ghg_log",
+    ]
+    TARGET = "gdp_log"
+
+    df_model = df[["country", "year"] + MODEL_FEATURES + [TARGET]].dropna()
+
+    # ── Train models ─────────────────────────────────────────────
+    X = df_model[MODEL_FEATURES]
+    y = df_model[TARGET]
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=RANDOM_STATE
+    )
+
+    scaler        = StandardScaler()
+    X_train_sc    = scaler.fit_transform(X_train)
+    X_test_sc     = scaler.transform(X_test)
+    X_train_sc_df = pd.DataFrame(X_train_sc, columns=MODEL_FEATURES)
+    X_test_sc_df  = pd.DataFrame(X_test_sc,  columns=MODEL_FEATURES)
+
+    model_ols = LinearRegression()
+    model_ols.fit(X_train_sc_df, y_train)
+
+    ridge_model = RidgeCV(alphas=[0.01, 0.1, 1, 10, 100, 1000])
+    ridge_model.fit(X_train_sc_df, y_train)
+
+    model_rf = RandomForestRegressor(n_estimators=50, random_state=RANDOM_STATE)
+    model_rf.fit(X_train, y_train)
+
+    # ── Feature stats ────────────────────────────────────────────
+    RAW_LOG_COLS = ["co2", "methane", "nitrous_oxide",
+                    "oil_co2", "primary_energy_consumption", "total_ghg"]
+    DIRECT_COLS  = ["co2_per_unit_energy", "energy_per_capita", "ghg_per_capita"]
+
+    feat_stats = {}
+    for col in RAW_LOG_COLS + DIRECT_COLS:
+        feat_stats[col] = {
+            "min":    float(df[col].quantile(0.01)),
+            "max":    float(df[col].quantile(0.99)),
+            "median": float(df[col].median()),
+        }
+
+    return model_ols, ridge_model, model_rf, scaler, feat_stats
 
 
 @st.cache_data
