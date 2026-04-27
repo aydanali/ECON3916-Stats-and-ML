@@ -1,5 +1,5 @@
 # ============================================================
-# app.py — GDP & Emissions Dashboard 
+# app.py — GDP & Emissions Dashboard
 # World Bank Environmental Economics Project
 # ============================================================
 # Tabs:
@@ -135,8 +135,8 @@ def load_data():
     Returns the full cleaned DataFrame (all columns) and the model-ready
     subset (log-transformed features + gdp_log).
     """
-    df_full  = pd.read_csv("owid_clean_dash.csv")
-    df_model = pd.read_csv("owid_model_data.csv")
+    df_full  = pd.read_csv("https://raw.githubusercontent.com/aydanali/ECON3916-Stats-and-ML/refs/heads/main/FinalProject/Streamlit/owid_clean_dash.csv")
+    df_model = pd.read_csv("https://raw.githubusercontent.com/aydanali/ECON3916-Stats-and-ML/refs/heads/main/FinalProject/Streamlit/owid_clean_dash.csv")
     return df_full, df_model
 
 
