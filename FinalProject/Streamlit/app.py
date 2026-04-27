@@ -1,5 +1,5 @@
 # ============================================================
-# app.py — GDP & Emissions Dashboard
+# app.py — GDP & Emissions Dashboard 
 # World Bank Environmental Economics Project
 # ============================================================
 # Tabs:
